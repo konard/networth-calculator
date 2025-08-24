@@ -311,7 +311,14 @@
                 if (saved) {
                     try {
                         const parsed = JSON.parse(saved);
-                        setEntries(parsed.entries || entries);
+                        // Fix old entries that don't have frequency field
+                        const fixedEntries = (parsed.entries || entries).map(entry => {
+                            if ((entry.type === 'income' || entry.type === 'expense') && !entry.frequency) {
+                                return { ...entry, frequency: 'recurring' };
+                            }
+                            return entry;
+                        });
+                        setEntries(fixedEntries);
                         setProjectionYears(parsed.projectionYears || 10);
                         setNextId(parsed.nextId || 1);
                         setDataPointFrequency(parsed.dataPointFrequency || 'monthly');
@@ -416,13 +423,13 @@
                     } else if (entry.type === 'debt') {
                         totalDebts += Math.abs(amount);
                         totalAnnualInterest -= Math.abs(amount) * (Math.abs(rate) / 100);
-                    } else if (entry.type === 'income' && entry.frequency === 'recurring') {
+                    } else if (entry.type === 'income' && (entry.frequency === 'recurring' || entry.frequency === undefined)) {
                         if (entry.period === 'monthly') {
                             recurringMonthlyIncome += Math.abs(amount);
                         } else if (entry.period === 'yearly') {
                             recurringMonthlyIncome += Math.abs(amount) / 12;
                         }
-                    } else if (entry.type === 'expense' && entry.frequency === 'recurring') {
+                    } else if (entry.type === 'expense' && (entry.frequency === 'recurring' || entry.frequency === undefined)) {
                         if (entry.period === 'monthly') {
                             recurringMonthlyExpense += Math.abs(amount);
                         } else if (entry.period === 'yearly') {
@@ -438,13 +445,6 @@
                 const monthlyFlow = totalAnnualFlow / 12;
                 const dailyFlow = totalAnnualFlow / 365;
                 
-                console.log('Debug:', {
-                    totalAnnualInterest,
-                    recurringMonthlyIncome,
-                    recurringMonthlyExpense,
-                    totalAnnualFlow,
-                    monthlyFlow
-                });
                 
                 // Calculate percentages based on total flow (including income/expenses)
                 const absNetWorth = Math.abs(netWorth);
@@ -498,7 +498,7 @@
                                 if (month >= eventMonth) {
                                     totalValue += absAmount * sign;
                                 }
-                            } else if (entry.frequency === 'recurring') {
+                            } else if (entry.frequency === 'recurring' || entry.frequency === undefined) {
                                 // Recurring income/expense
                                 let monthlyAmount = absAmount;
                                 if (entry.period === 'yearly') {
