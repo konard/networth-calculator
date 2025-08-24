@@ -42,7 +42,8 @@
         }
         
         .entry {
-            display: flex;
+            display: grid;
+            grid-template-columns: 140px 120px 100px 120px 120px 140px 80px;
             align-items: center;
             gap: 10px;
             padding: 15px;
@@ -59,19 +60,28 @@
         }
         
         .entry-type {
-            font-size: 1.2rem;
-            min-width: 100px;
             display: flex;
             align-items: center;
             gap: 5px;
         }
         
+        .entry-type select {
+            flex: 1;
+        }
+        
+        .entry-field {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        
         .entry input, .entry select {
-            padding: 8px 12px;
+            padding: 8px 10px;
             border: 1px solid #ddd;
             border-radius: 6px;
             font-size: 14px;
             transition: border-color 0.3s;
+            width: 100%;
         }
         
         .entry input:focus, .entry select:focus {
@@ -79,20 +89,22 @@
             border-color: #667eea;
         }
         
-        .entry input[type="number"] {
-            width: 120px;
+        .entry input.positive {
+            color: #10b981;
+            font-weight: 600;
         }
         
-        .entry select {
-            min-width: 120px;
+        .entry input.negative {
+            color: #ef4444;
+            font-weight: 600;
         }
         
         .entry-label {
-            font-size: 12px;
+            font-size: 11px;
             color: #666;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.3px;
         }
         
         button {
@@ -120,6 +132,7 @@
             color: white;
             padding: 6px 12px;
             font-size: 12px;
+            height: fit-content;
         }
         
         .btn-remove:hover {
@@ -134,42 +147,59 @@
             flex-wrap: wrap;
         }
         
-        .projection-control {
+        .control-group {
             display: flex;
             align-items: center;
             gap: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .control-group label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #666;
+        }
+        
+        .control-group input, .control-group select {
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
         }
         
         .results {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
             margin: 30px 0;
         }
         
         .result-card {
-            padding: 20px;
+            padding: 15px;
             background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             border-radius: 10px;
             text-align: center;
         }
         
         .result-label {
-            font-size: 12px;
+            font-size: 11px;
             color: #666;
             margin-bottom: 5px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            font-weight: 600;
         }
         
         .result-value {
-            font-size: 1.5rem;
+            font-size: 1.3rem;
             font-weight: bold;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
         }
         
         .result-subtitle {
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             color: #666;
         }
         
@@ -193,6 +223,30 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         
+        .hidden {
+            display: none;
+        }
+        
+        @media (max-width: 968px) {
+            .entry {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .entry-field {
+                width: 100%;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .control-group {
+                justify-content: space-between;
+            }
+        }
+        
         @media (max-width: 768px) {
             .container {
                 padding: 20px;
@@ -203,43 +257,8 @@
                 padding: 0;
             }
             
-            .entry {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 10px;
-            }
-            
-            .entry-type {
-                font-size: 1.1rem;
-            }
-            
-            .entry input[type="number"], .entry select {
-                width: 100%;
-            }
-            
-            .controls {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
             .results {
                 grid-template-columns: 1fr;
-            }
-        }
-        
-        @media (min-width: 769px) {
-            .entry {
-                width: 100%;
-            }
-            
-            .container {
-                width: 90%;
-            }
-        }
-        
-        @media (min-width: 1024px) {
-            .container {
-                width: 80%;
             }
         }
     </style>
@@ -257,29 +276,31 @@
 
         function App() {
             const [entries, setEntries] = useState([
-                { id: 0, amount: '', rate: '', type: 'asset', compounding: 'none' }
+                { id: 0, amount: '', rate: '', type: 'asset', compounding: 'annual', frequency: 'once', period: 'monthly', periodValue: 12, timing: 0 }
             ]);
             const [nextId, setNextId] = useState(1);
             const [results, setResults] = useState(null);
             const [projectionYears, setProjectionYears] = useState(10);
+            const [dataPointFrequency, setDataPointFrequency] = useState('monthly');
             const chartRef = useRef(null);
             const chartInstance = useRef(null);
 
             const typeConfig = {
                 asset: { emoji: '💰', label: 'Asset', sign: 1 },
                 debt: { emoji: '💳', label: 'Debt', sign: -1 },
-                income: { emoji: '💵', label: 'Fixed Income', sign: 1 },
-                expense: { emoji: '📉', label: 'Fixed Expense', sign: -1 }
+                income: { emoji: '💵', label: 'Income', sign: 1 },
+                expense: { emoji: '📉', label: 'Expense', sign: -1 }
             };
 
             useEffect(() => {
                 const saved = localStorage.getItem('networthCalculatorData');
                 if (saved) {
                     try {
-                        const { entries: savedEntries, projectionYears: savedYears, nextId: savedNextId } = JSON.parse(saved);
-                        setEntries(savedEntries);
-                        setProjectionYears(savedYears);
-                        setNextId(savedNextId);
+                        const parsed = JSON.parse(saved);
+                        setEntries(parsed.entries || entries);
+                        setProjectionYears(parsed.projectionYears || 10);
+                        setNextId(parsed.nextId || 1);
+                        setDataPointFrequency(parsed.dataPointFrequency || 'monthly');
                     } catch (e) {
                         console.error('Error loading saved data:', e);
                     }
@@ -287,11 +308,26 @@
             }, []);
 
             useEffect(() => {
-                localStorage.setItem('networthCalculatorData', JSON.stringify({ entries, projectionYears, nextId }));
-            }, [entries, projectionYears, nextId]);
+                localStorage.setItem('networthCalculatorData', JSON.stringify({ 
+                    entries, 
+                    projectionYears, 
+                    nextId,
+                    dataPointFrequency 
+                }));
+            }, [entries, projectionYears, nextId, dataPointFrequency]);
 
             const addEntry = () => {
-                setEntries([...entries, { id: nextId, amount: '', rate: '', type: 'asset', compounding: 'none' }]);
+                setEntries([...entries, { 
+                    id: nextId, 
+                    amount: '', 
+                    rate: '', 
+                    type: 'asset', 
+                    compounding: 'annual',
+                    frequency: 'once',
+                    period: 'monthly',
+                    periodValue: 12,
+                    timing: 0
+                }]);
                 setNextId(nextId + 1);
             };
 
@@ -306,115 +342,159 @@
             const updateEntry = (id, field, value) => {
                 setEntries(entries.map(entry => {
                     if (entry.id === id) {
-                        return { ...entry, [field]: value };
+                        const updated = { ...entry, [field]: value };
+                        
+                        // Reset fields based on type
+                        if (field === 'type') {
+                            if (value === 'income' || value === 'expense') {
+                                updated.rate = '0';
+                                updated.compounding = 'none';
+                            }
+                        }
+                        
+                        return updated;
                     }
                     return entry;
                 }));
             };
 
-            const calculateFV = (principal, annualRate, years, compounding, isRecurring = false) => {
+            const calculateFV = (principal, annualRate, months, compounding) => {
+                const years = months / 12;
                 if (years === 0) return principal;
                 
-                if (isRecurring) {
-                    // For recurring income/expenses, calculate total accumulated value
-                    let total = 0;
-                    for (let year = 0; year < years; year++) {
-                        // Each year's contribution grows for the remaining years
-                        const remainingYears = years - year;
-                        if (compounding === 'none') {
-                            total += principal * (1 + annualRate * remainingYears);
-                        } else {
-                            let periodsPerYear = 1;
-                            if (compounding === 'annual') periodsPerYear = 1;
-                            if (compounding === 'monthly') periodsPerYear = 12;
-                            else if (compounding === 'daily') periodsPerYear = 365;
-                            const periodRate = annualRate / periodsPerYear;
-                            const totalPeriods = remainingYears * periodsPerYear;
-                            total += principal * Math.pow(1 + periodRate, totalPeriods);
-                        }
-                    }
-                    return total;
-                } else {
-                    // For assets and debts
-                    if (compounding === 'none') {
-                        return principal * (1 + annualRate * years);
-                    } else {
-                        let periodsPerYear = 1;
-                        if (compounding === 'annual') periodsPerYear = 1;
-                        if (compounding === 'monthly') periodsPerYear = 12;
-                        else if (compounding === 'daily') periodsPerYear = 365;
-                        const periodRate = annualRate / periodsPerYear;
-                        const totalPeriods = years * periodsPerYear;
-                        return principal * Math.pow(1 + periodRate, totalPeriods);
-                    }
+                if (compounding === 'none' || !compounding) {
+                    return principal * (1 + annualRate * years);
+                } else if (compounding === 'annual') {
+                    return principal * Math.pow(1 + annualRate, years);
+                } else if (compounding === 'monthly') {
+                    const monthlyRate = annualRate / 12;
+                    return principal * Math.pow(1 + monthlyRate, months);
+                } else if (compounding === 'daily') {
+                    const dailyRate = annualRate / 365;
+                    const days = months * 30.417; // Average days per month
+                    return principal * Math.pow(1 + dailyRate, days);
                 }
+                return principal;
+            };
+
+            const getMonthsFromTiming = (timing, periodValue) => {
+                return timing * periodValue;
             };
 
             const calculate = () => {
-                let totalAnnualInterest = 0;
-                let totalMonthlyInterest = 0;
                 let totalAssets = 0;
                 let totalDebts = 0;
-                let totalIncome = 0;
-                let totalExpenses = 0;
+                let totalAnnualInterest = 0;
+                let recurringMonthlyIncome = 0;
+                let recurringMonthlyExpense = 0;
 
                 entries.forEach(entry => {
                     const amount = parseFloat(entry.amount) || 0;
                     const rate = parseFloat(entry.rate) || 0;
-                    const annualInterest = amount * (rate / 100);
+                    const sign = typeConfig[entry.type].sign;
                     
-                    totalAnnualInterest += annualInterest * typeConfig[entry.type].sign;
-                    totalMonthlyInterest += Math.abs(annualInterest / 12);
-
-                    switch(entry.type) {
-                        case 'asset':
-                            totalAssets += amount;
-                            break;
-                        case 'debt':
-                            totalDebts += amount;
-                            break;
-                        case 'income':
-                            totalIncome += amount;
-                            break;
-                        case 'expense':
-                            totalExpenses += amount;
-                            break;
+                    if (entry.type === 'asset') {
+                        totalAssets += amount;
+                        totalAnnualInterest += amount * (rate / 100);
+                    } else if (entry.type === 'debt') {
+                        totalDebts += amount;
+                        totalAnnualInterest -= amount * (rate / 100);
+                    } else if (entry.type === 'income' && entry.frequency === 'recurring') {
+                        if (entry.period === 'monthly') {
+                            recurringMonthlyIncome += amount;
+                        } else if (entry.period === 'yearly') {
+                            recurringMonthlyIncome += amount / 12;
+                        }
+                    } else if (entry.type === 'expense' && entry.frequency === 'recurring') {
+                        if (entry.period === 'monthly') {
+                            recurringMonthlyExpense += amount;
+                        } else if (entry.period === 'yearly') {
+                            recurringMonthlyExpense += amount / 12;
+                        }
                     }
                 });
 
                 const netWorth = totalAssets - totalDebts;
-                const absNetWorth = Math.abs(netWorth);
-                const netPercentage = absNetWorth !== 0 ? (totalAnnualInterest / absNetWorth * 100) : 0;
+                const monthlyInterest = totalAnnualInterest / 12;
                 const dailyInterest = totalAnnualInterest / 365;
+                const netMonthlyFlow = recurringMonthlyIncome - recurringMonthlyExpense + monthlyInterest;
+                
+                // Calculate percentages
+                const absNetWorth = Math.abs(netWorth);
+                const annualPercentage = absNetWorth !== 0 ? (totalAnnualInterest / absNetWorth * 100) : 0;
+                const monthlyPercentage = absNetWorth !== 0 ? (monthlyInterest / absNetWorth * 100) : 0;
+                const dailyPercentage = absNetWorth !== 0 ? (dailyInterest / absNetWorth * 100) : 0;
 
                 setResults({
                     netWorth,
                     totalAssets,
                     totalDebts,
-                    totalIncome,
-                    totalExpenses,
                     totalAnnualInterest,
-                    totalMonthlyInterest,
+                    monthlyInterest,
                     dailyInterest,
-                    netPercentage
+                    annualPercentage,
+                    monthlyPercentage,
+                    dailyPercentage,
+                    recurringMonthlyIncome: recurringMonthlyIncome * 12, // Annual for display
+                    recurringMonthlyExpense: recurringMonthlyExpense * 12 // Annual for display
                 });
 
-                // Project networth
-                const networthData = [];
-                for (let year = 0; year <= projectionYears; year++) {
-                    let totalFV = 0;
+                // Project networth with monthly precision
+                const totalMonths = projectionYears * 12;
+                const dataPoints = [];
+                const labels = [];
+                
+                // Determine data point interval
+                let monthInterval = 1;
+                if (dataPointFrequency === 'quarterly') monthInterval = 3;
+                else if (dataPointFrequency === 'yearly') monthInterval = 12;
+                
+                for (let month = 0; month <= totalMonths; month += monthInterval) {
+                    let totalValue = 0;
                     
                     entries.forEach(entry => {
                         const amount = parseFloat(entry.amount) || 0;
                         const rate = parseFloat(entry.rate) || 0;
-                        const annualRate = rate / 100;
-                        const isRecurring = entry.type === 'income' || entry.type === 'expense';
+                        const sign = typeConfig[entry.type].sign;
                         
-                        const fv = calculateFV(amount, annualRate, year, entry.compounding, isRecurring);
-                        totalFV += fv * typeConfig[entry.type].sign;
+                        if (entry.type === 'asset' || entry.type === 'debt') {
+                            // Assets and debts with interest
+                            const fv = calculateFV(amount, rate / 100, month, entry.compounding || 'none');
+                            totalValue += fv * sign;
+                        } else if (entry.type === 'income' || entry.type === 'expense') {
+                            if (entry.frequency === 'once') {
+                                // One-time income/expense
+                                const eventMonth = getMonthsFromTiming(entry.timing || 0, entry.periodValue || 1);
+                                if (month >= eventMonth) {
+                                    totalValue += amount * sign;
+                                }
+                            } else if (entry.frequency === 'recurring') {
+                                // Recurring income/expense
+                                let monthlyAmount = amount;
+                                if (entry.period === 'yearly') {
+                                    monthlyAmount = amount / 12;
+                                }
+                                totalValue += monthlyAmount * month * sign;
+                            }
+                        }
                     });
                     
-                    networthData.push(totalFV);
+                    dataPoints.push(totalValue);
+                    
+                    // Create label
+                    if (month === 0) {
+                        labels.push('Now');
+                    } else if (month < 12) {
+                        labels.push(`${month}m`);
+                    } else {
+                        const years = Math.floor(month / 12);
+                        const months = month % 12;
+                        if (months === 0) {
+                            labels.push(`${years}y`);
+                        } else {
+                            labels.push(`${years}y ${months}m`);
+                        }
+                    }
                 }
 
                 // Draw graph
@@ -425,42 +505,62 @@
                 chartInstance.current = new Chart(ctx, {
                     type: 'line',
                     data: {
-                        labels: Array.from({ length: projectionYears + 1 }, (_, i) => `Year ${i}`),
+                        labels: labels,
                         datasets: [{
-                            label: 'Projected Net Worth (RUB)',
-                            data: networthData,
+                            label: 'Projected Net Worth (₽)',
+                            data: dataPoints,
                             borderColor: 'rgba(102, 126, 234, 1)',
                             backgroundColor: 'rgba(102, 126, 234, 0.1)',
                             fill: true,
-                            tension: 0.4
+                            tension: 0.3,
+                            pointRadius: (context) => context.dataIndex === 0 ? 6 : 2,
+                            pointBackgroundColor: (context) => {
+                                return context.dataIndex === 0 ? '#ff6b6b' : 'rgba(102, 126, 234, 1)';
+                            },
+                            pointBorderColor: (context) => {
+                                return context.dataIndex === 0 ? '#ff6b6b' : 'rgba(102, 126, 234, 1)';
+                            }
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: true,
+                        interaction: {
+                            intersect: false,
+                            mode: 'index'
+                        },
                         plugins: {
                             legend: {
                                 display: true,
                                 position: 'top'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const value = context.parsed.y;
+                                        const formatted = new Intl.NumberFormat('ru-RU').format(Math.round(value));
+                                        return `Net Worth: ${value >= 0 ? '+' : ''}${formatted} ₽`;
+                                    }
+                                }
                             }
                         },
                         scales: {
                             y: {
-                                beginAtZero: false,
                                 title: {
                                     display: true,
-                                    text: 'Net Worth (RUB)'
+                                    text: 'Net Worth (₽)'
                                 },
                                 ticks: {
                                     callback: function(value) {
-                                        return value.toLocaleString() + ' ₽';
+                                        const formatted = new Intl.NumberFormat('ru-RU').format(value);
+                                        return `${value >= 0 ? '+' : ''}${formatted}`;
                                     }
                                 }
                             },
                             x: {
                                 title: {
                                     display: true,
-                                    text: 'Years'
+                                    text: 'Time'
                                 }
                             }
                         }
@@ -470,17 +570,39 @@
 
             useEffect(() => {
                 calculate();
-            }, [entries, projectionYears]);
-
-            const getColorClass = (value) => {
-                if (value > 0) return 'positive';
-                if (value < 0) return 'negative';
-                return 'neutral';
-            };
+            }, [entries, projectionYears, dataPointFrequency]);
 
             const formatCurrency = (value) => {
-                return new Intl.NumberFormat('ru-RU').format(Math.round(value));
+                const formatted = new Intl.NumberFormat('ru-RU').format(Math.round(Math.abs(value)));
+                return `${value >= 0 ? '+' : '-'}${formatted} ₽`;
             };
+
+            const formatPercentage = (value) => {
+                return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+            };
+
+            const getInputClass = (value) => {
+                const num = parseFloat(value);
+                if (isNaN(num) || num === 0) return '';
+                return num > 0 ? 'positive' : 'negative';
+            };
+
+            const formatInputValue = (value, type) => {
+                if (value === '' || value === '-') return value;
+                const num = parseFloat(value);
+                if (isNaN(num)) return value;
+                
+                const sign = typeConfig[type].sign;
+                if (sign === -1 && num > 0) {
+                    return `-${Math.abs(num)}`;
+                } else if (sign === 1 && num < 0) {
+                    return `${Math.abs(num)}`;
+                }
+                return value;
+            };
+
+            const isRecurringType = (type) => type === 'income' || type === 'expense';
+            const needsRate = (type) => type === 'asset' || type === 'debt';
 
             return (
                 <div className="container">
@@ -489,52 +611,122 @@
                     <div className="entries-container">
                         {entries.map(entry => (
                             <div key={entry.id} className="entry">
-                                <div className="entry-type">
-                                    <span>{typeConfig[entry.type].emoji}</span>
-                                    <select
-                                        value={entry.type}
-                                        onChange={(e) => updateEntry(entry.id, 'type', e.target.value)}
-                                    >
-                                        <option value="asset">Asset</option>
-                                        <option value="debt">Debt</option>
-                                        <option value="income">Income</option>
-                                        <option value="expense">Expense</option>
-                                    </select>
+                                <div className="entry-field">
+                                    <div className="entry-label">Type</div>
+                                    <div className="entry-type">
+                                        <span>{typeConfig[entry.type].emoji}</span>
+                                        <select
+                                            value={entry.type}
+                                            onChange={(e) => updateEntry(entry.id, 'type', e.target.value)}
+                                        >
+                                            <option value="asset">Asset</option>
+                                            <option value="debt">Debt</option>
+                                            <option value="income">Income</option>
+                                            <option value="expense">Expense</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 
-                                <div>
+                                <div className="entry-field">
                                     <div className="entry-label">Amount</div>
                                     <input
                                         type="number"
                                         value={entry.amount}
+                                        className={getInputClass(formatInputValue(entry.amount, entry.type))}
                                         placeholder="0"
                                         onChange={(e) => updateEntry(entry.id, 'amount', e.target.value)}
                                     />
                                 </div>
                                 
-                                <div>
-                                    <div className="entry-label">Rate %</div>
-                                    <input
-                                        type="number"
-                                        step="0.1"
-                                        value={entry.rate}
-                                        placeholder="0"
-                                        onChange={(e) => updateEntry(entry.id, 'rate', e.target.value)}
-                                    />
-                                </div>
+                                {needsRate(entry.type) ? (
+                                    <>
+                                        <div className="entry-field">
+                                            <div className="entry-label">Rate %</div>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                value={entry.rate}
+                                                className={getInputClass(entry.rate)}
+                                                placeholder="0"
+                                                onChange={(e) => updateEntry(entry.id, 'rate', e.target.value)}
+                                            />
+                                        </div>
+                                        
+                                        <div className="entry-field">
+                                            <div className="entry-label">Compound</div>
+                                            <select
+                                                value={entry.compounding}
+                                                onChange={(e) => updateEntry(entry.id, 'compounding', e.target.value)}
+                                            >
+                                                <option value="none">None</option>
+                                                <option value="annual">Annual</option>
+                                                <option value="monthly">Monthly</option>
+                                                <option value="daily">Daily</option>
+                                            </select>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="entry-field">
+                                            <div className="entry-label">Frequency</div>
+                                            <select
+                                                value={entry.frequency}
+                                                onChange={(e) => updateEntry(entry.id, 'frequency', e.target.value)}
+                                            >
+                                                <option value="once">One-time</option>
+                                                <option value="recurring">Recurring</option>
+                                            </select>
+                                        </div>
+                                        
+                                        {entry.frequency === 'once' ? (
+                                            <div className="entry-field">
+                                                <div className="entry-label">When</div>
+                                                <div style={{display: 'flex', gap: '5px'}}>
+                                                    <input
+                                                        type="number"
+                                                        value={entry.timing}
+                                                        placeholder="0"
+                                                        style={{width: '60px'}}
+                                                        onChange={(e) => updateEntry(entry.id, 'timing', e.target.value)}
+                                                    />
+                                                    <select
+                                                        value={entry.periodValue}
+                                                        style={{width: '60px'}}
+                                                        onChange={(e) => updateEntry(entry.id, 'periodValue', e.target.value)}
+                                                    >
+                                                        <option value="1">month</option>
+                                                        <option value="12">year</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="entry-field">
+                                                <div className="entry-label">Period</div>
+                                                <select
+                                                    value={entry.period}
+                                                    onChange={(e) => updateEntry(entry.id, 'period', e.target.value)}
+                                                >
+                                                    <option value="monthly">Monthly</option>
+                                                    <option value="yearly">Yearly</option>
+                                                </select>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
                                 
-                                <div>
-                                    <div className="entry-label">Compounding</div>
-                                    <select
-                                        value={entry.compounding}
-                                        onChange={(e) => updateEntry(entry.id, 'compounding', e.target.value)}
-                                    >
-                                        <option value="none">No Compound</option>
-                                        <option value="annual">Annual</option>
-                                        <option value="monthly">Monthly</option>
-                                        <option value="daily">Daily</option>
-                                    </select>
-                                </div>
+                                {!isRecurringType(entry.type) && entry.frequency !== 'once' && (
+                                    <div className="entry-field" style={{visibility: 'hidden'}}>
+                                        <div className="entry-label">&nbsp;</div>
+                                        <div>&nbsp;</div>
+                                    </div>
+                                )}
+                                
+                                {!needsRate(entry.type) && entry.frequency !== 'once' && (
+                                    <div className="entry-field" style={{visibility: 'hidden'}}>
+                                        <div className="entry-label">&nbsp;</div>
+                                        <div>&nbsp;</div>
+                                    </div>
+                                )}
                                 
                                 <button className="btn-remove" onClick={() => removeEntry(entry.id)}>
                                     Remove
@@ -547,16 +739,30 @@
                         <button className="btn-primary" onClick={addEntry}>
                             + Add Entry
                         </button>
-                        <div className="projection-control">
-                            <label>Projection Years:</label>
+                        
+                        <div className="control-group">
+                            <label>Projection:</label>
                             <input
                                 type="number"
                                 value={projectionYears}
                                 onChange={(e) => setProjectionYears(parseInt(e.target.value) || 10)}
                                 min="1"
                                 max="50"
-                                style={{width: '80px'}}
+                                style={{width: '60px'}}
                             />
+                            <span>years</span>
+                        </div>
+                        
+                        <div className="control-group">
+                            <label>Data Points:</label>
+                            <select
+                                value={dataPointFrequency}
+                                onChange={(e) => setDataPointFrequency(e.target.value)}
+                            >
+                                <option value="monthly">Monthly</option>
+                                <option value="quarterly">Quarterly</option>
+                                <option value="yearly">Yearly</option>
+                            </select>
                         </div>
                     </div>
                     
@@ -564,67 +770,70 @@
                         <div className="results">
                             <div className="result-card">
                                 <div className="result-label">Net Worth</div>
-                                <div className={`result-value ${getColorClass(results.netWorth)}`}>
-                                    {formatCurrency(results.netWorth)} ₽
+                                <div className={`result-value ${results.netWorth >= 0 ? 'positive' : 'negative'}`}>
+                                    {formatCurrency(results.netWorth)}
                                 </div>
                             </div>
                             
                             <div className="result-card">
                                 <div className="result-label">Total Assets</div>
                                 <div className="result-value positive">
-                                    {formatCurrency(results.totalAssets)} ₽
+                                    {formatCurrency(results.totalAssets)}
                                 </div>
                             </div>
                             
                             <div className="result-card">
                                 <div className="result-label">Total Debts</div>
                                 <div className="result-value negative">
-                                    {formatCurrency(results.totalDebts)} ₽
+                                    {formatCurrency(results.totalDebts)}
                                 </div>
                             </div>
                             
                             <div className="result-card">
                                 <div className="result-label">Annual Interest</div>
-                                <div className={`result-value ${getColorClass(results.totalAnnualInterest)}`}>
-                                    {formatCurrency(results.totalAnnualInterest)} ₽
+                                <div className={`result-value ${results.totalAnnualInterest >= 0 ? 'positive' : 'negative'}`}>
+                                    {formatCurrency(results.totalAnnualInterest)}
                                 </div>
-                                <div className="result-subtitle">
-                                    {results.netPercentage.toFixed(2)}% per year
+                                <div className={`result-subtitle ${results.annualPercentage >= 0 ? 'positive' : 'negative'}`}>
+                                    {formatPercentage(results.annualPercentage)} per year
                                 </div>
                             </div>
                             
                             <div className="result-card">
                                 <div className="result-label">Monthly Interest</div>
-                                <div className="result-value neutral">
-                                    {formatCurrency(results.totalMonthlyInterest)} ₽
+                                <div className={`result-value ${results.monthlyInterest >= 0 ? 'positive' : 'negative'}`}>
+                                    {formatCurrency(results.monthlyInterest)}
                                 </div>
-                                <div className="result-subtitle">
-                                    absolute value
+                                <div className={`result-subtitle ${results.monthlyPercentage >= 0 ? 'positive' : 'negative'}`}>
+                                    {formatPercentage(results.monthlyPercentage)} per month
                                 </div>
                             </div>
                             
                             <div className="result-card">
                                 <div className="result-label">Daily Interest</div>
-                                <div className={`result-value ${getColorClass(results.dailyInterest)}`}>
-                                    {formatCurrency(results.dailyInterest)} ₽
+                                <div className={`result-value ${results.dailyInterest >= 0 ? 'positive' : 'negative'}`}>
+                                    {formatCurrency(results.dailyInterest)}
+                                </div>
+                                <div className={`result-subtitle ${results.dailyPercentage >= 0 ? 'positive' : 'negative'}`}>
+                                    {formatPercentage(results.dailyPercentage)} per day
                                 </div>
                             </div>
                             
-                            {results.totalIncome > 0 && (
+                            {results.recurringMonthlyIncome > 0 && (
                                 <div className="result-card">
-                                    <div className="result-label">Fixed Income</div>
+                                    <div className="result-label">Recurring Income</div>
                                     <div className="result-value positive">
-                                        {formatCurrency(results.totalIncome)} ₽
+                                        {formatCurrency(results.recurringMonthlyIncome)}
                                     </div>
                                     <div className="result-subtitle">per year</div>
                                 </div>
                             )}
                             
-                            {results.totalExpenses > 0 && (
+                            {results.recurringMonthlyExpense > 0 && (
                                 <div className="result-card">
-                                    <div className="result-label">Fixed Expenses</div>
+                                    <div className="result-label">Recurring Expense</div>
                                     <div className="result-value negative">
-                                        {formatCurrency(results.totalExpenses)} ₽
+                                        {formatCurrency(-results.recurringMonthlyExpense)}
                                     </div>
                                     <div className="result-subtitle">per year</div>
                                 </div>
@@ -632,7 +841,7 @@
                         </div>
                     )}
                     
-                    <div id="graph">
+                    <div className="chart-container">
                         <canvas ref={chartRef}></canvas>
                     </div>
                 </div>
