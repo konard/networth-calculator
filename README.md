@@ -1,2 +1,3 @@
 # networth-calculator
-A tool to calculate speed of your growth or decline
+
+A tool to calculate speed of your networth growth or decline.
