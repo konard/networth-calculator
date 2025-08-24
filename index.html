@@ -43,7 +43,7 @@
         
         .entry {
             display: grid;
-            grid-template-columns: 140px 120px 100px 120px 120px 140px 80px;
+            grid-template-columns: 140px 120px 100px 120px 120px 140px 50px;
             align-items: center;
             gap: 10px;
             padding: 15px;
@@ -128,15 +128,24 @@
         }
         
         .btn-remove {
-            background: #ff6b6b;
+            background: #ef4444;
+            border: none;
             color: white;
-            padding: 6px 12px;
-            font-size: 12px;
-            height: fit-content;
+            padding: 8px;
+            font-size: 18px;
+            height: 36px;
+            width: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            cursor: pointer;
+            justify-self: end;
         }
         
         .btn-remove:hover {
-            background: #ff5252;
+            background: #dc2626;
+            transform: scale(1.1);
         }
         
         .controls {
@@ -397,8 +406,8 @@
                         totalAssets += amount;
                         totalAnnualInterest += amount * (rate / 100);
                     } else if (entry.type === 'debt') {
-                        totalDebts += amount;
-                        totalAnnualInterest -= amount * (rate / 100);
+                        totalDebts += Math.abs(amount);
+                        totalAnnualInterest -= Math.abs(amount) * (Math.abs(rate) / 100);
                     } else if (entry.type === 'income' && entry.frequency === 'recurring') {
                         if (entry.period === 'monthly') {
                             recurringMonthlyIncome += amount;
@@ -415,28 +424,30 @@
                 });
 
                 const netWorth = totalAssets - totalDebts;
-                const monthlyInterest = totalAnnualInterest / 12;
-                const dailyInterest = totalAnnualInterest / 365;
-                const netMonthlyFlow = recurringMonthlyIncome - recurringMonthlyExpense + monthlyInterest;
                 
-                // Calculate percentages
+                // Calculate total flows including recurring income/expenses
+                const totalAnnualFlow = totalAnnualInterest + (recurringMonthlyIncome * 12) - (recurringMonthlyExpense * 12);
+                const monthlyFlow = totalAnnualFlow / 12;
+                const dailyFlow = totalAnnualFlow / 365;
+                
+                // Calculate percentages based on total flow (including income/expenses)
                 const absNetWorth = Math.abs(netWorth);
-                const annualPercentage = absNetWorth !== 0 ? (totalAnnualInterest / absNetWorth * 100) : 0;
-                const monthlyPercentage = absNetWorth !== 0 ? (monthlyInterest / absNetWorth * 100) : 0;
-                const dailyPercentage = absNetWorth !== 0 ? (dailyInterest / absNetWorth * 100) : 0;
+                const annualPercentage = absNetWorth !== 0 ? (totalAnnualFlow / absNetWorth * 100) : 0;
+                const monthlyPercentage = absNetWorth !== 0 ? (monthlyFlow / absNetWorth * 100) : 0;
+                const dailyPercentage = absNetWorth !== 0 ? (dailyFlow / absNetWorth * 100) : 0;
 
                 setResults({
                     netWorth,
                     totalAssets,
                     totalDebts,
-                    totalAnnualInterest,
-                    monthlyInterest,
-                    dailyInterest,
+                    totalAnnualInterest: totalAnnualFlow,  // Now includes all flows
+                    monthlyInterest: monthlyFlow,          // Now includes all flows
+                    dailyInterest: dailyFlow,              // Now includes all flows
                     annualPercentage,
                     monthlyPercentage,
                     dailyPercentage,
-                    recurringMonthlyIncome: recurringMonthlyIncome * 12, // Annual for display
-                    recurringMonthlyExpense: recurringMonthlyExpense * 12 // Annual for display
+                    recurringMonthlyIncome: recurringMonthlyIncome * 12,
+                    recurringMonthlyExpense: recurringMonthlyExpense * 12
                 });
 
                 // Project networth with monthly precision
@@ -645,10 +656,18 @@
                                             <input
                                                 type="number"
                                                 step="0.1"
-                                                value={entry.rate}
-                                                className={getInputClass(entry.rate)}
+                                                value={entry.type === 'debt' && entry.rate > 0 ? `-${entry.rate}` : entry.rate}
+                                                className={entry.type === 'debt' ? 'negative' : getInputClass(entry.rate)}
                                                 placeholder="0"
-                                                onChange={(e) => updateEntry(entry.id, 'rate', e.target.value)}
+                                                onChange={(e) => {
+                                                    let val = e.target.value;
+                                                    if (entry.type === 'debt' && val && !val.startsWith('-')) {
+                                                        val = Math.abs(parseFloat(val)) || 0;
+                                                    } else {
+                                                        val = val.replace('-', '');
+                                                    }
+                                                    updateEntry(entry.id, 'rate', val);
+                                                }}
                                             />
                                         </div>
                                         
@@ -728,8 +747,8 @@
                                     </div>
                                 )}
                                 
-                                <button className="btn-remove" onClick={() => removeEntry(entry.id)}>
-                                    Remove
+                                <button className="btn-remove" onClick={() => removeEntry(entry.id)} title="Remove entry">
+                                    ✕
                                 </button>
                             </div>
                         ))}
@@ -737,7 +756,7 @@
                     
                     <div className="controls">
                         <button className="btn-primary" onClick={addEntry}>
-                            + Add Entry
+                            ➕ Add Entry
                         </button>
                         
                         <div className="control-group">
@@ -785,12 +804,12 @@
                             <div className="result-card">
                                 <div className="result-label">Total Debts</div>
                                 <div className="result-value negative">
-                                    {formatCurrency(results.totalDebts)}
+                                    {formatCurrency(-Math.abs(results.totalDebts))}
                                 </div>
                             </div>
                             
                             <div className="result-card">
-                                <div className="result-label">Annual Interest</div>
+                                <div className="result-label">Annual Flow</div>
                                 <div className={`result-value ${results.totalAnnualInterest >= 0 ? 'positive' : 'negative'}`}>
                                     {formatCurrency(results.totalAnnualInterest)}
                                 </div>
@@ -800,7 +819,7 @@
                             </div>
                             
                             <div className="result-card">
-                                <div className="result-label">Monthly Interest</div>
+                                <div className="result-label">Monthly Flow</div>
                                 <div className={`result-value ${results.monthlyInterest >= 0 ? 'positive' : 'negative'}`}>
                                     {formatCurrency(results.monthlyInterest)}
                                 </div>
@@ -810,7 +829,7 @@
                             </div>
                             
                             <div className="result-card">
-                                <div className="result-label">Daily Interest</div>
+                                <div className="result-label">Daily Flow</div>
                                 <div className={`result-value ${results.dailyInterest >= 0 ? 'positive' : 'negative'}`}>
                                     {formatCurrency(results.dailyInterest)}
                                 </div>
