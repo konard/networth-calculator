@@ -363,6 +363,9 @@
                             if (value === 'income' || value === 'expense') {
                                 updated.rate = '0';
                                 updated.compounding = 'none';
+                                updated.frequency = 'recurring';  // Default to recurring for income/expense
+                            } else {
+                                updated.frequency = 'once';  // Assets/debts don't recur
                             }
                         }
                         
@@ -434,6 +437,14 @@
                 const totalAnnualFlow = totalAnnualInterest + (recurringMonthlyIncome * 12) - (recurringMonthlyExpense * 12);
                 const monthlyFlow = totalAnnualFlow / 12;
                 const dailyFlow = totalAnnualFlow / 365;
+                
+                console.log('Debug:', {
+                    totalAnnualInterest,
+                    recurringMonthlyIncome,
+                    recurringMonthlyExpense,
+                    totalAnnualFlow,
+                    monthlyFlow
+                });
                 
                 // Calculate percentages based on total flow (including income/expenses)
                 const absNetWorth = Math.abs(netWorth);
