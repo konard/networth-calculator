@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -67,7 +68,7 @@
 
         function App() {
             const [entries, setEntries] = useState([
-                { id: 0, principal: '', rate: '', type: 'asset' }
+                { id: 0, principal: '', rate: '', type: 'asset', compounding: 'none' }
             ]);
             const [nextId, setNextId] = useState(1);
             const [results, setResults] = useState(null);
@@ -76,7 +77,7 @@
             const chartInstance = useRef(null);
 
             const addEntry = () => {
-                setEntries([...entries, { id: nextId, principal: '', rate: '', type: 'asset' }]);
+                setEntries([...entries, { id: nextId, principal: '', rate: '', type: 'asset', compounding: 'none' }]);
                 setNextId(nextId + 1);
             };
 
@@ -89,43 +90,68 @@
             };
 
             const updateEntry = (id, field, value) => {
-                const updatedEntries = entries.map(entry => 
-                    entry.id === id ? { ...entry, [field]: value } : entry
-                );
-                setEntries(updatedEntries);
+                setEntries(entries.map(entry => {
+                    if (entry.id === id) {
+                        let newEntry = { ...entry, [field]: value };
+                        if (field === 'type') {
+                            let r = parseFloat(newEntry.rate) || 0;
+                            if (newEntry.type === 'debt') {
+                                r = -Math.abs(r);
+                            }
+                            // For asset, do not flip sign, allow negative
+                            newEntry.rate = r.toString();
+                        } else if (field === 'rate') {
+                            let r = parseFloat(value) || 0;
+                            if (newEntry.type === 'debt') {
+                                r = -Math.abs(r);
+                            }
+                            // For asset, allow as is (positive or negative)
+                            newEntry.rate = r.toString();
+                        }
+                        return newEntry;
+                    }
+                    return entry;
+                }));
+            };
+
+            const calculateFV = (principal, annualRate, years, compounding) => {
+                if (years === 0) return principal;
+                if (compounding === 'none') {
+                    return principal * (1 + annualRate * years);
+                } else {
+                    let periodsPerYear = 1;
+                    if (compounding === 'monthly') periodsPerYear = 12;
+                    else if (compounding === 'daily') periodsPerYear = 365;
+                    const periodRate = annualRate / periodsPerYear;
+                    const totalPeriods = years * periodsPerYear;
+                    return principal * Math.pow(1 + periodRate, totalPeriods);
+                }
             };
 
             const calculate = () => {
-                let totalPrincipal = 0;
                 let totalAnnualInterest = 0;
-                let assets = [];
-                let debts = [];
+                let assetsPrincipal = 0;
+                let debtsPrincipal = 0;
 
                 entries.forEach(entry => {
                     const principal = parseFloat(entry.principal) || 0;
-                    let rate = parseFloat(entry.rate) || 0;
+                    const rate = parseFloat(entry.rate) || 0;
 
-                    if (entry.type === 'debt' && rate > 0) {
-                        rate = -rate;
-                    } else if (entry.type === 'asset' && rate < 0) {
-                        rate = Math.abs(rate);
-                    }
-
-                    totalPrincipal += principal;
                     totalAnnualInterest += principal * (rate / 100);
 
                     if (entry.type === 'asset') {
-                        assets.push({ principal, rate: Math.abs(rate) });
+                        assetsPrincipal += principal;
                     } else {
-                        debts.push({ principal, rate: Math.abs(rate) });
+                        debtsPrincipal += principal;
                     }
                 });
 
-                const netPercentage = totalPrincipal !== 0 ? (totalAnnualInterest / totalPrincipal * 100).toFixed(2) : 0;
+                const netWorth = assetsPrincipal - debtsPrincipal;
+                const netPercentage = netWorth !== 0 ? (totalAnnualInterest / netWorth * 100).toFixed(2) : 0;
                 const dailyInterest = (totalAnnualInterest / 365).toFixed(2);
 
                 setResults({
-                    totalPrincipal,
+                    netWorth,
                     totalAnnualInterest,
                     dailyInterest,
                     netPercentage
@@ -134,9 +160,20 @@
                 // Project networth
                 const networthData = [];
                 for (let year = 0; year <= projectionYears; year++) {
-                    const fvAssets = assets.reduce((sum, a) => sum + a.principal * Math.pow(1 + a.rate / 100, year), 0);
-                    const fvDebts = debts.reduce((sum, d) => sum + d.principal * Math.pow(1 + d.rate / 100, year), 0);
-                    networthData.push(fvAssets - fvDebts);
+                    let totalFV = 0;
+                    entries.forEach(entry => {
+                        const principal = parseFloat(entry.principal) || 0;
+                        const rate = parseFloat(entry.rate) || 0;
+                        let entryRate = rate / 100;
+                        let sign = 1;
+                        if (entry.type === 'debt') {
+                            entryRate = Math.abs(entryRate);
+                            sign = -1;
+                        }
+                        const fv = calculateFV(principal, entryRate, year, entry.compounding);
+                        totalFV += sign * fv;
+                    });
+                    networthData.push(totalFV);
                 }
 
                 // Draw graph
@@ -176,6 +213,10 @@
                 });
             };
 
+            useEffect(() => {
+                calculate();
+            }, [entries, projectionYears]);
+
             return (
                 <div>
                     <h2>Asset & Debt Interest Calculator</h2>
@@ -191,7 +232,7 @@
                                 type="number"
                                 placeholder="Annual % Rate (e.g., 20 or 24)"
                                 step="0.1"
-                                value={entry.rate}
+                                value={entry.type === 'debt' && parseFloat(entry.rate) === 0 ? '-0' : entry.rate}
                                 onChange={(e) => updateEntry(entry.id, 'rate', e.target.value)}
                             />
                             <select
@@ -201,11 +242,19 @@
                                 <option value="asset">Asset</option>
                                 <option value="debt">Debt</option>
                             </select>
+                            <select
+                                value={entry.compounding}
+                                onChange={(e) => updateEntry(entry.id, 'compounding', e.target.value)}
+                            >
+                                <option value="none">No Compound</option>
+                                <option value="annual">Annual</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="daily">Daily</option>
+                            </select>
                             <button className="removeBtn" onClick={() => removeEntry(entry.id)}>Remove</button>
                         </div>
                     ))}
                     <button onClick={addEntry}>Add Entry</button>
-                    <button onClick={calculate}>Calculate</button>
                     <div>
                         <label>Projection Years: </label>
                         <input
@@ -219,7 +268,7 @@
                     {results && (
                         <div id="results">
                             <h3>Results</h3>
-                            <p>Total Principal: {results.totalPrincipal.toLocaleString()} RUB</p>
+                            <p>Total Net Worth: {results.netWorth.toLocaleString()} RUB</p>
                             <p>Total Annual Interest: {results.totalAnnualInterest.toLocaleString()} RUB</p>
                             <p>Daily Interest: {results.dailyInterest} RUB</p>
                             <p>Net Percentage: {results.netPercentage}% per year</p>
@@ -236,3 +285,4 @@
     </script>
 </body>
 </html>
+```
