@@ -11,19 +11,31 @@
             max-width: 800px;
             margin-left: auto;
             margin-right: auto;
+            background-color: #f9f9f9;
+        }
+        h2 {
+            text-align: center;
+            color: #333;
         }
         .entry {
             margin-bottom: 15px;
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
-            display: flex;
+            display: grid;
+            grid-template-columns: auto 1fr auto 1fr auto 1fr auto 1fr auto;
             align-items: center;
+            gap: 5px;
+            background-color: #fff;
+        }
+        .entry label {
+            font-weight: bold;
+            color: #555;
         }
         .entry input, .entry select {
-            margin: 5px;
             padding: 5px;
-            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 3px;
         }
         button {
             padding: 10px 15px;
@@ -48,9 +60,21 @@
             padding: 10px;
             border: 1px solid #ccc;
             border-radius: 5px;
+            background-color: #fff;
+        }
+        #results p {
+            margin: 5px 0;
         }
         #graph {
             margin-top: 20px;
+            background-color: #fff;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .projection {
+            text-align: center;
+            margin: 10px 0;
         }
     </style>
 </head>
@@ -75,6 +99,20 @@
             const chartRef = useRef(null);
             const chartInstance = useRef(null);
 
+            useEffect(() => {
+                const saved = localStorage.getItem('calculatorData');
+                if (saved) {
+                    const { entries: savedEntries, projectionYears: savedYears, nextId: savedNextId } = JSON.parse(saved);
+                    setEntries(savedEntries);
+                    setProjectionYears(savedYears);
+                    setNextId(savedNextId);
+                }
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('calculatorData', JSON.stringify({ entries, projectionYears, nextId }));
+            }, [entries, projectionYears, nextId]);
+
             const addEntry = () => {
                 setEntries([...entries, { id: nextId, principal: '', rate: '', type: 'asset', compounding: 'none' }]);
                 setNextId(nextId + 1);
@@ -97,14 +135,12 @@
                             if (newEntry.type === 'debt') {
                                 r = -Math.abs(r);
                             }
-                            // For asset, do not flip sign, allow negative
                             newEntry.rate = r.toString();
                         } else if (field === 'rate') {
                             let r = parseFloat(value) || 0;
                             if (newEntry.type === 'debt') {
                                 r = -Math.abs(r);
                             }
-                            // For asset, allow as is (positive or negative)
                             newEntry.rate = r.toString();
                         }
                         return newEntry;
@@ -119,6 +155,7 @@
                     return principal * (1 + annualRate * years);
                 } else {
                     let periodsPerYear = 1;
+                    if (compounding === 'annual') periodsPerYear = 1;
                     if (compounding === 'monthly') periodsPerYear = 12;
                     else if (compounding === 'daily') periodsPerYear = 365;
                     const periodRate = annualRate / periodsPerYear;
@@ -146,7 +183,8 @@
                 });
 
                 const netWorth = assetsPrincipal - debtsPrincipal;
-                const netPercentage = netWorth !== 0 ? (totalAnnualInterest / netWorth * 100).toFixed(2) : 0;
+                const absNetWorth = Math.abs(netWorth);
+                const netPercentage = absNetWorth !== 0 ? (totalAnnualInterest / absNetWorth * 100).toFixed(2) : 0;
                 const dailyInterest = (totalAnnualInterest / 365).toFixed(2);
 
                 setResults({
@@ -163,11 +201,10 @@
                     entries.forEach(entry => {
                         const principal = parseFloat(entry.principal) || 0;
                         const rate = parseFloat(entry.rate) || 0;
-                        let entryRate = rate / 100;
-                        let sign = 1;
-                        if (entry.type === 'debt') {
-                            entryRate = Math.abs(entryRate);
-                            sign = -1;
+                        let entryRate = Math.abs(rate / 100);
+                        let sign = entry.type === 'debt' ? -1 : 1;
+                        if (entry.type === 'asset' && rate < 0) {
+                            entryRate = -entryRate;
                         }
                         const fv = calculateFV(principal, entryRate, year, entry.compounding);
                         totalFV += sign * fv;
@@ -216,24 +253,31 @@
                 calculate();
             }, [entries, projectionYears]);
 
+            const getColor = (value) => {
+                if (value > 0) return 'green';
+                if (value < 0) return 'red';
+                return 'black';
+            };
+
             return (
                 <div>
                     <h2>Asset & Debt Interest Calculator</h2>
                     {entries.map(entry => (
                         <div key={entry.id} className="entry">
+                            <label>Principal</label>
                             <input
                                 type="number"
-                                placeholder="Principal (e.g., 500000)"
                                 value={entry.principal}
                                 onChange={(e) => updateEntry(entry.id, 'principal', e.target.value)}
                             />
+                            <label>Rate %</label>
                             <input
                                 type="number"
-                                placeholder="Annual % Rate (e.g., 20 or 24)"
                                 step="0.1"
                                 value={entry.type === 'debt' && parseFloat(entry.rate) === 0 ? '-0' : entry.rate}
                                 onChange={(e) => updateEntry(entry.id, 'rate', e.target.value)}
                             />
+                            <label>Type</label>
                             <select
                                 value={entry.type}
                                 onChange={(e) => updateEntry(entry.id, 'type', e.target.value)}
@@ -241,6 +285,7 @@
                                 <option value="asset">Asset</option>
                                 <option value="debt">Debt</option>
                             </select>
+                            <label>Compounding</label>
                             <select
                                 value={entry.compounding}
                                 onChange={(e) => updateEntry(entry.id, 'compounding', e.target.value)}
@@ -254,7 +299,7 @@
                         </div>
                     ))}
                     <button onClick={addEntry}>Add Entry</button>
-                    <div>
+                    <div className="projection">
                         <label>Projection Years: </label>
                         <input
                             type="number"
@@ -267,10 +312,10 @@
                     {results && (
                         <div id="results">
                             <h3>Results</h3>
-                            <p>Total Net Worth: {results.netWorth.toLocaleString()} RUB</p>
-                            <p>Total Annual Interest: {results.totalAnnualInterest.toLocaleString()} RUB</p>
-                            <p>Daily Interest: {results.dailyInterest} RUB</p>
-                            <p>Net Percentage: {results.netPercentage}% per year</p>
+                            <p style={{color: getColor(results.netWorth)}}>Total Net Worth: {results.netWorth.toLocaleString()} RUB</p>
+                            <p style={{color: getColor(results.totalAnnualInterest)}}>Total Annual Interest: {results.totalAnnualInterest.toLocaleString()} RUB</p>
+                            <p style={{color: getColor(results.dailyInterest)}}>Daily Interest: {results.dailyInterest} RUB</p>
+                            <p style={{color: getColor(parseFloat(results.netPercentage))}}>Net Percentage: {results.netPercentage}% per year</p>
                         </div>
                     )}
                     <div id="graph">
