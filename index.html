@@ -311,17 +311,61 @@
                 if (saved) {
                     try {
                         const parsed = JSON.parse(saved);
-                        // Fix old entries that don't have frequency field
-                        const fixedEntries = (parsed.entries || entries).map(entry => {
-                            if ((entry.type === 'income' || entry.type === 'expense') && !entry.frequency) {
-                                return { ...entry, frequency: 'recurring' };
+                        let needsMigration = false;
+                        
+                        // Migrate old entries to new format
+                        const migratedEntries = (parsed.entries || entries).map(entry => {
+                            const migrated = { ...entry };
+                            
+                            // Add missing fields based on type
+                            if (entry.type === 'income' || entry.type === 'expense') {
+                                // Income/Expense should have frequency and period
+                                if (!migrated.frequency) {
+                                    migrated.frequency = 'recurring';
+                                    needsMigration = true;
+                                }
+                                if (!migrated.period) {
+                                    migrated.period = 'monthly';
+                                    needsMigration = true;
+                                }
+                                // Income/Expense don't need rate or compounding
+                                if (!migrated.rate) migrated.rate = '0';
+                                if (!migrated.compounding) migrated.compounding = 'none';
+                            } else if (entry.type === 'asset' || entry.type === 'debt') {
+                                // Assets/Debts don't have frequency but need rate and compounding
+                                if (!migrated.frequency) {
+                                    migrated.frequency = 'once';
+                                    needsMigration = true;
+                                }
+                                if (!migrated.compounding) {
+                                    migrated.compounding = 'annual';
+                                    needsMigration = true;
+                                }
+                                if (!migrated.rate) migrated.rate = '0';
                             }
-                            return entry;
+                            
+                            // Add other missing fields with defaults
+                            if (!migrated.periodValue) migrated.periodValue = 12;
+                            if (!migrated.timing) migrated.timing = 0;
+                            
+                            return migrated;
                         });
-                        setEntries(fixedEntries);
+                        
+                        setEntries(migratedEntries);
                         setProjectionYears(parsed.projectionYears || 10);
                         setNextId(parsed.nextId || 1);
                         setDataPointFrequency(parsed.dataPointFrequency || 'monthly');
+                        
+                        // Save migrated data back if needed
+                        if (needsMigration) {
+                            console.log('Migrated old data format to new format');
+                            localStorage.setItem('networthCalculatorData', JSON.stringify({ 
+                                entries: migratedEntries, 
+                                projectionYears: parsed.projectionYears || 10, 
+                                nextId: parsed.nextId || 1,
+                                dataPointFrequency: parsed.dataPointFrequency || 'monthly'
+                            }));
+                        }
                     } catch (e) {
                         console.error('Error loading saved data:', e);
                     }
@@ -816,6 +860,19 @@
                                 <option value="yearly">Yearly</option>
                             </select>
                         </div>
+                        
+                        <button 
+                            style={{background: '#6b7280', padding: '8px 16px', fontSize: '12px'}}
+                            onClick={() => {
+                                if (confirm('Clear all data and start fresh?')) {
+                                    localStorage.removeItem('networthCalculatorData');
+                                    window.location.reload();
+                                }
+                            }}
+                            title="Clear all data and start fresh"
+                        >
+                            🗑️ Reset
+                        </button>
                     </div>
                     
                     {results && (
