@@ -43,7 +43,7 @@
         
         .entry {
             display: grid;
-            grid-template-columns: 140px 120px 100px 120px 120px 140px;
+            grid-template-columns: 140px 120px 100px 120px 100px 100px 140px;
             align-items: center;
             gap: 10px;
             padding: 15px;
@@ -245,6 +245,7 @@
             .entry {
                 grid-template-columns: 1fr;
                 gap: 10px;
+                padding-right: 60px;
             }
             
             .entry-field {
@@ -290,7 +291,7 @@
 
         function App() {
             const [entries, setEntries] = useState([
-                { id: 0, amount: '', rate: '', type: 'asset', compounding: 'annual', frequency: 'once', period: 'monthly', periodValue: 12, timing: 0 }
+                { id: 0, amount: '', rate: '', type: 'asset', compounding: 'annual', frequency: 'once', period: 'monthly', periodValue: 12, timing: 0, recurringAmount: '', recurringPeriod: 'monthly' }
             ]);
             const [nextId, setNextId] = useState(1);
             const [results, setResults] = useState(null);
@@ -348,6 +349,13 @@
                             if (!migrated.periodValue) migrated.periodValue = 12;
                             if (!migrated.timing) migrated.timing = 0;
                             
+                            // Add recurring amount fields for assets/debts (new feature)
+                            if ((entry.type === 'asset' || entry.type === 'debt') && !migrated.recurringAmount) {
+                                migrated.recurringAmount = '';
+                                migrated.recurringPeriod = 'monthly';
+                                needsMigration = true;
+                            }
+                            
                             return migrated;
                         });
                         
@@ -391,7 +399,9 @@
                     frequency: 'once',
                     period: 'monthly',
                     periodValue: 12,
-                    timing: 0
+                    timing: 0,
+                    recurringAmount: '',
+                    recurringPeriod: 'monthly'
                 }]);
                 setNextId(nextId + 1);
             };
@@ -459,14 +469,31 @@
                 entries.forEach(entry => {
                     const amount = parseFloat(entry.amount) || 0;
                     const rate = parseFloat(entry.rate) || 0;
+                    const recurringAmount = parseFloat(entry.recurringAmount) || 0;
                     const sign = typeConfig[entry.type].sign;
                     
                     if (entry.type === 'asset') {
                         totalAssets += Math.abs(amount);
                         totalAnnualInterest += Math.abs(amount) * (Math.abs(rate) / 100);
+                        // Add recurring increases to income
+                        if (recurringAmount > 0) {
+                            if (entry.recurringPeriod === 'monthly') {
+                                recurringMonthlyIncome += Math.abs(recurringAmount);
+                            } else if (entry.recurringPeriod === 'yearly') {
+                                recurringMonthlyIncome += Math.abs(recurringAmount) / 12;
+                            }
+                        }
                     } else if (entry.type === 'debt') {
                         totalDebts += Math.abs(amount);
                         totalAnnualInterest -= Math.abs(amount) * (Math.abs(rate) / 100);
+                        // Add recurring repayments to expenses
+                        if (recurringAmount > 0) {
+                            if (entry.recurringPeriod === 'monthly') {
+                                recurringMonthlyExpense += Math.abs(recurringAmount);
+                            } else if (entry.recurringPeriod === 'yearly') {
+                                recurringMonthlyExpense += Math.abs(recurringAmount) / 12;
+                            }
+                        }
                     } else if (entry.type === 'income' && (entry.frequency === 'recurring' || entry.frequency === undefined)) {
                         if (entry.period === 'monthly') {
                             recurringMonthlyIncome += Math.abs(amount);
@@ -529,11 +556,37 @@
                         const sign = typeConfig[entry.type].sign;
                         
                         if (entry.type === 'asset' || entry.type === 'debt') {
-                            // Assets and debts with interest
+                            // Assets and debts with interest and recurring changes
                             const absAmount = Math.abs(amount);
                             const absRate = Math.abs(rate);
-                            const fv = calculateFV(absAmount, absRate / 100, month, entry.compounding || 'none');
-                            totalValue += fv * sign;
+                            const recurringAmount = Math.abs(parseFloat(entry.recurringAmount) || 0);
+                            
+                            // Calculate base value with interest
+                            let baseValue = calculateFV(absAmount, absRate / 100, month, entry.compounding || 'none');
+                            
+                            // Add accumulated recurring changes
+                            if (recurringAmount > 0) {
+                                let monthlyRecurring = recurringAmount;
+                                if (entry.recurringPeriod === 'yearly') {
+                                    monthlyRecurring = recurringAmount / 12;
+                                }
+                                
+                                // For assets: add deposits with compound interest
+                                // For debts: subtract repayments (reducing principal)
+                                if (entry.type === 'asset') {
+                                    // Each month's deposit grows with interest for remaining months
+                                    for (let m = 1; m <= month; m++) {
+                                        const remainingMonths = month - m;
+                                        const depositFV = calculateFV(monthlyRecurring, absRate / 100, remainingMonths, entry.compounding || 'none');
+                                        baseValue += depositFV;
+                                    }
+                                } else if (entry.type === 'debt') {
+                                    // Debt reduces by payments (simple subtraction)
+                                    baseValue = Math.max(0, baseValue - (monthlyRecurring * month));
+                                }
+                            }
+                            
+                            totalValue += baseValue * sign;
                         } else if (entry.type === 'income' || entry.type === 'expense') {
                             const absAmount = Math.abs(amount);
                             if (entry.frequency === 'once') {
@@ -760,6 +813,32 @@
                                                 <option value="daily">Daily</option>
                                             </select>
                                         </div>
+                                        
+                                        <div className="entry-field">
+                                            <div className="entry-label">{entry.type === 'asset' ? 'Increase' : 'Repayment'}</div>
+                                            <input
+                                                type="text"
+                                                value={formatInputValue(entry.recurringAmount, 'recurringAmount', entry.type === 'asset' ? 'income' : 'expense')}
+                                                className={getInputClass(formatInputValue(entry.recurringAmount, 'recurringAmount', entry.type === 'asset' ? 'income' : 'expense'))}
+                                                placeholder="0"
+                                                onChange={(e) => {
+                                                    const val = e.target.value.replace(/[^0-9.-]/g, '').replace(/^-/, '');
+                                                    updateEntry(entry.id, 'recurringAmount', val);
+                                                }}
+                                                title={entry.type === 'asset' ? 'Regular deposits to this asset' : 'Regular payments to reduce this debt'}
+                                            />
+                                        </div>
+                                        
+                                        <div className="entry-field">
+                                            <div className="entry-label">Period</div>
+                                            <select
+                                                value={entry.recurringPeriod}
+                                                onChange={(e) => updateEntry(entry.id, 'recurringPeriod', e.target.value)}
+                                            >
+                                                <option value="monthly">Monthly</option>
+                                                <option value="yearly">Yearly</option>
+                                            </select>
+                                        </div>
                                     </>
                                 ) : (
                                     <>
@@ -810,18 +889,22 @@
                                     </>
                                 )}
                                 
-                                {!isRecurringType(entry.type) && entry.frequency !== 'once' && (
-                                    <div className="entry-field" style={{visibility: 'hidden'}}>
-                                        <div className="entry-label">&nbsp;</div>
-                                        <div>&nbsp;</div>
-                                    </div>
-                                )}
-                                
-                                {!needsRate(entry.type) && entry.frequency !== 'once' && (
-                                    <div className="entry-field" style={{visibility: 'hidden'}}>
-                                        <div className="entry-label">&nbsp;</div>
-                                        <div>&nbsp;</div>
-                                    </div>
+                                {/* Spacers for income/expense to align with asset/debt columns */}
+                                {isRecurringType(entry.type) && (
+                                    <>
+                                        {entry.frequency !== 'once' && (
+                                            <>
+                                                <div className="entry-field" style={{visibility: 'hidden'}}>
+                                                    <div className="entry-label">&nbsp;</div>
+                                                    <div>&nbsp;</div>
+                                                </div>
+                                                <div className="entry-field" style={{visibility: 'hidden'}}>
+                                                    <div className="entry-label">&nbsp;</div>
+                                                    <div>&nbsp;</div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </>
                                 )}
                                 
                                 <button className="btn-remove" onClick={() => removeEntry(entry.id)} title="Remove entry">
