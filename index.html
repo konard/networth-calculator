@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asset & Debt Interest Calculator with React</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .entry {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+        }
+        .entry input, .entry select {
+            margin: 5px;
+            padding: 5px;
+            flex: 1;
+        }
+        button {
+            padding: 10px 15px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .removeBtn {
+            background-color: #f44336;
+        }
+        .removeBtn:hover {
+            background-color: #d32f2f;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #graph {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function App() {
+            const [entries, setEntries] = useState([
+                { id: 0, principal: '', rate: '', type: 'asset' }
+            ]);
+            const [nextId, setNextId] = useState(1);
+            const [results, setResults] = useState(null);
+            const [projectionYears, setProjectionYears] = useState(10);
+            const chartRef = useRef(null);
+            const chartInstance = useRef(null);
+
+            const addEntry = () => {
+                setEntries([...entries, { id: nextId, principal: '', rate: '', type: 'asset' }]);
+                setNextId(nextId + 1);
+            };
+
+            const removeEntry = (id) => {
+                if (entries.length > 1) {
+                    setEntries(entries.filter(entry => entry.id !== id));
+                } else {
+                    alert("At least one entry is required!");
+                }
+            };
+
+            const updateEntry = (id, field, value) => {
+                const updatedEntries = entries.map(entry => 
+                    entry.id === id ? { ...entry, [field]: value } : entry
+                );
+                setEntries(updatedEntries);
+            };
+
+            const calculate = () => {
+                let totalPrincipal = 0;
+                let totalAnnualInterest = 0;
+                let assets = [];
+                let debts = [];
+
+                entries.forEach(entry => {
+                    const principal = parseFloat(entry.principal) || 0;
+                    let rate = parseFloat(entry.rate) || 0;
+
+                    if (entry.type === 'debt' && rate > 0) {
+                        rate = -rate;
+                    } else if (entry.type === 'asset' && rate < 0) {
+                        rate = Math.abs(rate);
+                    }
+
+                    totalPrincipal += principal;
+                    totalAnnualInterest += principal * (rate / 100);
+
+                    if (entry.type === 'asset') {
+                        assets.push({ principal, rate: Math.abs(rate) });
+                    } else {
+                        debts.push({ principal, rate: Math.abs(rate) });
+                    }
+                });
+
+                const netPercentage = totalPrincipal !== 0 ? (totalAnnualInterest / totalPrincipal * 100).toFixed(2) : 0;
+                const dailyInterest = (totalAnnualInterest / 365).toFixed(2);
+
+                setResults({
+                    totalPrincipal,
+                    totalAnnualInterest,
+                    dailyInterest,
+                    netPercentage
+                });
+
+                // Project networth
+                const networthData = [];
+                for (let year = 0; year <= projectionYears; year++) {
+                    const fvAssets = assets.reduce((sum, a) => sum + a.principal * Math.pow(1 + a.rate / 100, year), 0);
+                    const fvDebts = debts.reduce((sum, d) => sum + d.principal * Math.pow(1 + d.rate / 100, year), 0);
+                    networthData.push(fvAssets - fvDebts);
+                }
+
+                // Draw graph
+                if (chartInstance.current) {
+                    chartInstance.current.destroy();
+                }
+                const ctx = chartRef.current.getContext('2d');
+                chartInstance.current = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: Array.from({ length: projectionYears + 1 }, (_, i) => `Year ${i}`),
+                        datasets: [{
+                            label: 'Projected Net Worth (RUB)',
+                            data: networthData,
+                            borderColor: 'rgba(75,192,192,1)',
+                            backgroundColor: 'rgba(75,192,192,0.2)',
+                            fill: true,
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                title: {
+                                    display: true,
+                                    text: 'Net Worth (RUB)'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Years'
+                                }
+                            }
+                        }
+                    }
+                });
+            };
+
+            return (
+                <div>
+                    <h2>Asset & Debt Interest Calculator</h2>
+                    {entries.map(entry => (
+                        <div key={entry.id} className="entry">
+                            <input
+                                type="number"
+                                placeholder="Principal (e.g., 500000)"
+                                value={entry.principal}
+                                onChange={(e) => updateEntry(entry.id, 'principal', e.target.value)}
+                            />
+                            <input
+                                type="number"
+                                placeholder="Annual % Rate (e.g., 20 or 24)"
+                                step="0.1"
+                                value={entry.rate}
+                                onChange={(e) => updateEntry(entry.id, 'rate', e.target.value)}
+                            />
+                            <select
+                                value={entry.type}
+                                onChange={(e) => updateEntry(entry.id, 'type', e.target.value)}
+                            >
+                                <option value="asset">Asset</option>
+                                <option value="debt">Debt</option>
+                            </select>
+                            <button className="removeBtn" onClick={() => removeEntry(entry.id)}>Remove</button>
+                        </div>
+                    ))}
+                    <button onClick={addEntry}>Add Entry</button>
+                    <button onClick={calculate}>Calculate</button>
+                    <div>
+                        <label>Projection Years: </label>
+                        <input
+                            type="number"
+                            value={projectionYears}
+                            onChange={(e) => setProjectionYears(parseInt(e.target.value) || 10)}
+                            min="1"
+                            max="50"
+                        />
+                    </div>
+                    {results && (
+                        <div id="results">
+                            <h3>Results</h3>
+                            <p>Total Principal: {results.totalPrincipal.toLocaleString()} RUB</p>
+                            <p>Total Annual Interest: {results.totalAnnualInterest.toLocaleString()} RUB</p>
+                            <p>Daily Interest: {results.dailyInterest} RUB</p>
+                            <p>Net Percentage: {results.netPercentage}% per year</p>
+                        </div>
+                    )}
+                    <div id="graph">
+                        <canvas ref={chartRef}></canvas>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
