@@ -459,6 +459,20 @@
                 return timing * periodValue;
             };
 
+            const calculateDebtPayoffMonths = (debtAmount, monthlyPayment, monthlyRate) => {
+                if (monthlyPayment <= 0) return Infinity;
+                
+                let remainingDebt = debtAmount;
+                let months = 0;
+                
+                while (remainingDebt > 0.01 && months < 1200) { // Max 100 years
+                    remainingDebt = remainingDebt * (1 + monthlyRate) - monthlyPayment;
+                    months++;
+                }
+                
+                return months;
+            };
+
             const calculate = () => {
                 let totalAssets = 0;
                 let totalDebts = 0;
@@ -475,23 +489,33 @@
                     if (entry.type === 'asset') {
                         totalAssets += Math.abs(amount);
                         totalAnnualInterest += Math.abs(amount) * (Math.abs(rate) / 100);
-                        // Add recurring increases to income
-                        if (recurringAmount > 0) {
-                            if (entry.recurringPeriod === 'monthly') {
-                                recurringMonthlyIncome += Math.abs(recurringAmount);
-                            } else if (entry.recurringPeriod === 'yearly') {
-                                recurringMonthlyIncome += Math.abs(recurringAmount) / 12;
-                            }
-                        }
-                    } else if (entry.type === 'debt') {
-                        totalDebts += Math.abs(amount);
-                        totalAnnualInterest -= Math.abs(amount) * (Math.abs(rate) / 100);
-                        // Add recurring repayments to expenses
+                        // Asset increases are expenses (money going out of your pocket)
                         if (recurringAmount > 0) {
                             if (entry.recurringPeriod === 'monthly') {
                                 recurringMonthlyExpense += Math.abs(recurringAmount);
                             } else if (entry.recurringPeriod === 'yearly') {
                                 recurringMonthlyExpense += Math.abs(recurringAmount) / 12;
+                            }
+                        }
+                    } else if (entry.type === 'debt') {
+                        totalDebts += Math.abs(amount);
+                        totalAnnualInterest -= Math.abs(amount) * (Math.abs(rate) / 100);
+                        // Debt repayments are expenses only while debt exists
+                        if (recurringAmount > 0) {
+                            const monthlyRepayment = entry.recurringPeriod === 'monthly' ? 
+                                Math.abs(recurringAmount) : Math.abs(recurringAmount) / 12;
+                            
+                            const debtAmount = Math.abs(amount);
+                            const monthlyRate = Math.abs(rate) / 100 / 12;
+                            const monthsToPayoff = calculateDebtPayoffMonths(debtAmount, monthlyRepayment, monthlyRate);
+                            
+                            // For current flow calculation, include payment if debt would still exist after 1 month
+                            if (monthsToPayoff > 1) {
+                                recurringMonthlyExpense += monthlyRepayment;
+                            } else if (monthsToPayoff > 0) {
+                                // Partial payment for debt that gets paid off within the month
+                                let remainingAfterInterest = debtAmount * (1 + monthlyRate);
+                                recurringMonthlyExpense += Math.min(monthlyRepayment, remainingAfterInterest);
                             }
                         }
                     } else if (entry.type === 'income' && (entry.frequency === 'recurring' || entry.frequency === undefined)) {
@@ -572,7 +596,7 @@
                                 }
                                 
                                 // For assets: add deposits with compound interest
-                                // For debts: subtract repayments (reducing principal)
+                                // For debts: subtract repayments with payoff calculation
                                 if (entry.type === 'asset') {
                                     // Each month's deposit grows with interest for remaining months
                                     for (let m = 1; m <= month; m++) {
@@ -581,8 +605,20 @@
                                         baseValue += depositFV;
                                     }
                                 } else if (entry.type === 'debt') {
-                                    // Debt reduces by payments (simple subtraction)
-                                    baseValue = Math.max(0, baseValue - (monthlyRecurring * month));
+                                    // Calculate debt with payments and interest
+                                    let remainingDebt = absAmount;
+                                    const monthlyRate = absRate / 100 / 12;
+                                    
+                                    for (let m = 1; m <= month; m++) {
+                                        if (remainingDebt > 0) {
+                                            // Add monthly interest
+                                            remainingDebt = remainingDebt * (1 + monthlyRate);
+                                            // Subtract payment (or remainder if less than payment)
+                                            const payment = Math.min(monthlyRecurring, remainingDebt);
+                                            remainingDebt = Math.max(0, remainingDebt - payment);
+                                        }
+                                    }
+                                    baseValue = remainingDebt;
                                 }
                             }
                             
