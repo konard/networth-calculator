@@ -350,8 +350,18 @@
                             if (!migrated.timing) migrated.timing = 0;
                             
                             // Add recurring amount fields for assets/debts (new feature)
-                            if ((entry.type === 'asset' || entry.type === 'debt') && !migrated.recurringAmount) {
+                            if ((entry.type === 'asset' || entry.type === 'debt') && migrated.recurringAmount === undefined) {
                                 migrated.recurringAmount = '';
+                                migrated.recurringPeriod = 'monthly';
+                                needsMigration = true;
+                            }
+                            
+                            // Ensure all entries have the recurringAmount and recurringPeriod fields
+                            if (migrated.recurringAmount === undefined) {
+                                migrated.recurringAmount = '';
+                                needsMigration = true;
+                            }
+                            if (migrated.recurringPeriod === undefined) {
                                 migrated.recurringPeriod = 'monthly';
                                 needsMigration = true;
                             }
@@ -366,13 +376,14 @@
                         
                         // Save migrated data back if needed
                         if (needsMigration) {
-                            console.log('Migrated old data format to new format');
+                            console.log('Migrated old data format to new format with recurring amount fields');
                             localStorage.setItem('networthCalculatorData', JSON.stringify({ 
                                 entries: migratedEntries, 
                                 projectionYears: parsed.projectionYears || 10, 
                                 nextId: parsed.nextId || 1,
                                 dataPointFrequency: parsed.dataPointFrequency || 'monthly'
                             }));
+                            console.log('Migration completed. Data saved to localStorage.');
                         }
                     } catch (e) {
                         console.error('Error loading saved data:', e);
